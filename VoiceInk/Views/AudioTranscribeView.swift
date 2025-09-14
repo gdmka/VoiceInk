@@ -13,6 +13,7 @@ struct AudioTranscribeView: View {
     @State private var isEnhancementEnabled = false
     @State private var selectedPromptId: UUID?
     @State private var selectedCloudModelId: UUID?
+    @AppStorage("SelectedLanguage") private var selectedLanguage: String = "auto"
     
     var body: some View {
         ZStack {
@@ -150,6 +151,37 @@ struct AudioTranscribeView: View {
                                     }
                                     .fixedSize()
                                 }
+                                
+                                // Language Selection Menu
+                                if let selectedModel = getSelectedModel(), selectedModel.isMultilingualModel && !isLanguageSelectionDisabled() {
+                                    Menu {
+                                        ForEach(
+                                            selectedModel.supportedLanguages.sorted(by: {
+                                                if $0.key == "auto" { return true }
+                                                if $1.key == "auto" { return false }
+                                                return $0.value < $1.value
+                                            }), id: \.key
+                                        ) { key, value in
+                                            Button {
+                                                selectedLanguage = key
+                                            } label: {
+                                                HStack {
+                                                    Text(value)
+                                                    if selectedLanguage == key {
+                                                        Spacer()
+                                                        Image(systemName: "checkmark")
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Text(getCurrentLanguageDisplayName())
+                                            Image(systemName: "chevron.down")
+                                        }
+                                    }
+                                    .fixedSize()
+                                }
 
                                 Toggle("AI Enhancement", isOn: $isEnhancementEnabled)
                                     .toggleStyle(.switch)
@@ -223,7 +255,8 @@ struct AudioTranscribeView: View {
                                     url: url,
                                     modelContext: modelContext,
                                     whisperState: whisperState,
-                                    selectedCloudModel: selectedModel
+                                    selectedCloudModel: selectedModel,
+                                    selectedLanguage: selectedLanguage
                                 )
                             }
                         }
@@ -386,5 +419,23 @@ struct AudioTranscribeView: View {
         let minutes = Int(duration) / 60
         let seconds = Int(duration) % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+    
+    // Helper functions for language selection
+    private func getSelectedModel() -> (any TranscriptionModel)? {
+        if let selectedCloudModelId = selectedCloudModelId {
+            return whisperState.configuredCloudModels.first { $0.id == selectedCloudModelId }
+        }
+        return whisperState.currentTranscriptionModel
+    }
+    
+    private func isLanguageSelectionDisabled() -> Bool {
+        guard let model = getSelectedModel() else { return false }
+        return model.provider == .parakeet || model.provider == .gemini
+    }
+    
+    private func getCurrentLanguageDisplayName() -> String {
+        guard let model = getSelectedModel() else { return "Language" }
+        return model.supportedLanguages[selectedLanguage] ?? "Language"
     }
 }

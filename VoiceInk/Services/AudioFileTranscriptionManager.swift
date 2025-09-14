@@ -51,13 +51,18 @@ class AudioTranscriptionManager: ObservableObject {
     
     private init() {}
     
-    func startProcessing(url: URL, modelContext: ModelContext, whisperState: WhisperState, selectedCloudModel: CloudModel? = nil) {
+    func startProcessing(url: URL, modelContext: ModelContext, whisperState: WhisperState, selectedCloudModel: CloudModel? = nil, selectedLanguage: String? = nil) {
         // Cancel any existing processing
         cancelProcessing()
         
         isProcessing = true
         processingPhase = .loading
         errorMessage = nil
+        
+        // Set the selected language in UserDefaults if provided
+        if let language = selectedLanguage {
+            UserDefaults.standard.set(language, forKey: "SelectedLanguage")
+        }
         
         currentTask = Task {
             do {
