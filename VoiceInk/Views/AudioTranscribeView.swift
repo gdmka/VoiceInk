@@ -12,6 +12,7 @@ struct AudioTranscribeView: View {
     @State private var isAudioFileSelected = false
     @State private var isEnhancementEnabled = false
     @State private var selectedPromptId: UUID?
+    @State private var selectedCloudModelId: UUID?
     
     var body: some View {
         ZStack {
@@ -132,6 +133,24 @@ struct AudioTranscribeView: View {
                         VStack(spacing: 16) {
                             // AI Enhancement and Prompt in the same row
                             HStack(spacing: 16) {
+                                if !whisperState.configuredCloudModels.isEmpty {
+                                    Menu {
+                                        ForEach(whisperState.configuredCloudModels) { model in
+                                            Button(action: {
+                                                selectedCloudModelId = model.id
+                                            }) {
+                                                Text(model.displayName)
+                                            }
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Text(whisperState.configuredCloudModels.first(where: { $0.id == selectedCloudModelId })?.displayName ?? "Select Cloud Model")
+                                            Image(systemName: "chevron.down")
+                                        }
+                                    }
+                                    .fixedSize()
+                                }
+
                                 Toggle("AI Enhancement", isOn: $isEnhancementEnabled)
                                     .toggleStyle(.switch)
                                     .onChange(of: isEnhancementEnabled) { oldValue, newValue in
@@ -199,10 +218,12 @@ struct AudioTranscribeView: View {
                     HStack(spacing: 12) {
                         Button("Start Transcription") {
                             if let url = selectedAudioURL {
+                                let selectedModel = whisperState.configuredCloudModels.first { $0.id == selectedCloudModelId }
                                 transcriptionManager.startProcessing(
                                     url: url,
                                     modelContext: modelContext,
-                                    whisperState: whisperState
+                                    whisperState: whisperState,
+                                    selectedCloudModel: selectedModel
                                 )
                             }
                         }

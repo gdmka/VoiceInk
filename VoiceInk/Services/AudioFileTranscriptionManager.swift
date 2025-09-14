@@ -51,7 +51,7 @@ class AudioTranscriptionManager: ObservableObject {
     
     private init() {}
     
-    func startProcessing(url: URL, modelContext: ModelContext, whisperState: WhisperState) {
+    func startProcessing(url: URL, modelContext: ModelContext, whisperState: WhisperState, selectedCloudModel: CloudModel? = nil) {
         // Cancel any existing processing
         cancelProcessing()
         
@@ -61,7 +61,12 @@ class AudioTranscriptionManager: ObservableObject {
         
         currentTask = Task {
             do {
-                guard let currentModel = whisperState.currentTranscriptionModel else {
+                let modelToUse: any TranscriptionModel
+                if let cloudModel = selectedCloudModel {
+                    modelToUse = cloudModel
+                } else if let currentModel = whisperState.currentTranscriptionModel {
+                    modelToUse = currentModel
+                } else {
                     throw TranscriptionError.noModelSelected
                 }
                 
@@ -99,15 +104,15 @@ class AudioTranscriptionManager: ObservableObject {
                 let transcriptionStart = Date()
                 var text: String
                 
-                switch currentModel.provider {
+                switch modelToUse.provider {
                 case .local:
-                    text = try await localTranscriptionService!.transcribe(audioURL: permanentURL, model: currentModel)
+                    text = try await localTranscriptionService!.transcribe(audioURL: permanentURL, model: modelToUse)
                 case .parakeet:
-                    text = try await parakeetTranscriptionService!.transcribe(audioURL: permanentURL, model: currentModel)
+                    text = try await parakeetTranscriptionService!.transcribe(audioURL: permanentURL, model: modelToUse)
                 case .nativeApple:
-                    text = try await nativeAppleTranscriptionService.transcribe(audioURL: permanentURL, model: currentModel)
+                    text = try await nativeAppleTranscriptionService.transcribe(audioURL: permanentURL, model: modelToUse)
                 default: // Cloud models
-                    text = try await cloudTranscriptionService.transcribe(audioURL: permanentURL, model: currentModel)
+                    text = try await cloudTranscriptionService.transcribe(audioURL: permanentURL, model: modelToUse)
                 }
                 
                 let transcriptionDuration = Date().timeIntervalSince(transcriptionStart)
@@ -130,7 +135,7 @@ class AudioTranscriptionManager: ObservableObject {
                             duration: duration,
                             enhancedText: enhancedText,
                             audioFileURL: permanentURL.absoluteString,
-                            transcriptionModelName: currentModel.displayName,
+                            transcriptionModelName: modelToUse.displayName,
                             aiEnhancementModelName: enhancementService.getAIService()?.currentModel,
                             promptName: promptName,
                             transcriptionDuration: transcriptionDuration,
@@ -141,12 +146,12 @@ class AudioTranscriptionManager: ObservableObject {
                         NotificationCenter.default.post(name: .transcriptionCreated, object: transcription)
                         currentTranscription = transcription
                     } catch {
-                        logger.error("Enhancement failed: \(error.localizedDescription)")
+                        logger.error("Enhancement failed: \\(error.localizedDescription)")
                         let transcription = Transcription(
                             text: text,
                             duration: duration,
                             audioFileURL: permanentURL.absoluteString,
-                            transcriptionModelName: currentModel.displayName,
+                            transcriptionModelName: modelToUse.displayName,
                             promptName: nil,
                             transcriptionDuration: transcriptionDuration
                         )
@@ -160,7 +165,7 @@ class AudioTranscriptionManager: ObservableObject {
                         text: text,
                         duration: duration,
                         audioFileURL: permanentURL.absoluteString,
-                        transcriptionModelName: currentModel.displayName,
+                        transcriptionModelName: modelToUse.displayName,
                         promptName: nil,
                         transcriptionDuration: transcriptionDuration
                     )
@@ -211,4 +216,4 @@ enum TranscriptionError: Error, LocalizedError {
             return "Transcription was cancelled"
         }
     }
-} 
+}
