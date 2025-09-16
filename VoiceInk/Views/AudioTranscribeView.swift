@@ -12,6 +12,8 @@ struct AudioTranscribeView: View {
     @State private var isAudioFileSelected = false
     @State private var isEnhancementEnabled = false
     @State private var selectedPromptId: UUID?
+    @State private var selectedTranscriptionModel: (any TranscriptionModel)?
+    @AppStorage("SelectedLanguage") private var selectedLanguage: String = "auto"
     
     var body: some View {
         ZStack {
@@ -132,6 +134,55 @@ struct AudioTranscribeView: View {
                         VStack(spacing: 16) {
                             // AI Enhancement and Prompt in the same row
                             HStack(spacing: 16) {
+                                if !whisperState.usableModels.isEmpty {
+                                    Menu {
+                                        ForEach(whisperState.usableModels, id: \.id) { model in
+                                            Button(action: {
+                                                selectedTranscriptionModel = model
+                                            }) {
+                                                Text(model.displayName)
+                                            }
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Text(selectedTranscriptionModel?.displayName ?? "Select Model")
+                                            Image(systemName: "chevron.down")
+                                        }
+                                    }
+                                    .fixedSize()
+                                }
+                                
+                                // Language Selection Menu
+                                if let selectedModel = getSelectedModel(), selectedModel.isMultilingualModel && !isLanguageSelectionDisabled() {
+                                    Menu {
+                                        ForEach(
+                                            selectedModel.supportedLanguages.sorted(by: {
+                                                if $0.key == "auto" { return true }
+                                                if $1.key == "auto" { return false }
+                                                return $0.value < $1.value
+                                            }), id: \.key
+                                        ) { key, value in
+                                            Button {
+                                                selectedLanguage = key
+                                            } label: {
+                                                HStack {
+                                                    Text(value)
+                                                    if selectedLanguage == key {
+                                                        Spacer()
+                                                        Image(systemName: "checkmark")
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Text(getCurrentLanguageDisplayName())
+                                            Image(systemName: "chevron.down")
+                                        }
+                                    }
+                                    .fixedSize()
+                                }
+
                                 Toggle("AI Enhancement", isOn: $isEnhancementEnabled)
                                     .toggleStyle(.switch)
                                     .onChange(of: isEnhancementEnabled) { oldValue, newValue in
@@ -192,6 +243,7 @@ struct AudioTranscribeView: View {
                             // Initialize local state from enhancement service
                             isEnhancementEnabled = enhancementService.isEnhancementEnabled
                             selectedPromptId = enhancementService.selectedPromptId
+                            selectedTranscriptionModel = whisperState.currentTranscriptionModel
                         }
                     }
                     
@@ -199,10 +251,14 @@ struct AudioTranscribeView: View {
                     HStack(spacing: 12) {
                         Button("Start Transcription") {
                             if let url = selectedAudioURL {
+                                if let selectedModel = selectedTranscriptionModel {
+                                    whisperState.currentTranscriptionModel = selectedModel
+                                }
                                 transcriptionManager.startProcessing(
                                     url: url,
                                     modelContext: modelContext,
-                                    whisperState: whisperState
+                                    whisperState: whisperState,
+                                    selectedLanguage: selectedLanguage
                                 )
                             }
                         }
@@ -266,6 +322,12 @@ struct AudioTranscribeView: View {
                 .scaleEffect(0.8)
             Text(transcriptionManager.processingPhase.message)
                 .font(.headline)
+            
+            Button("Cancel Transcription") {
+                transcriptionManager.cancelProcessing()
+            }
+            .buttonStyle(.bordered)
+            .foregroundColor(.red)
         }
         .padding()
     }
@@ -365,5 +427,20 @@ struct AudioTranscribeView: View {
         let minutes = Int(duration) / 60
         let seconds = Int(duration) % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+    
+    // Helper functions for language selection
+    private func getSelectedModel() -> (any TranscriptionModel)? {
+        return selectedTranscriptionModel
+    }
+    
+    private func isLanguageSelectionDisabled() -> Bool {
+        guard let model = getSelectedModel() else { return true }
+        return model.provider == .parakeet
+    }
+    
+    private func getCurrentLanguageDisplayName() -> String {
+        guard let model = getSelectedModel() else { return "Language" }
+        return model.supportedLanguages[selectedLanguage] ?? "Unknown"
     }
 }

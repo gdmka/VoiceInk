@@ -24,6 +24,7 @@ class WhisperState: NSObject, ObservableObject {
     @Published var isModelLoading = false
     @Published var availableModels: [WhisperModel] = []
     @Published var allAvailableModels: [any TranscriptionModel] = PredefinedModels.models
+    @Published var configuredCloudModels: [CloudModel] = []
     @Published var clipboardMessage = ""
     @Published var miniRecorderError: String?
     @Published var shouldCancelRecording = false
@@ -121,6 +122,7 @@ class WhisperState: NSObject, ObservableObject {
         loadAvailableModels()
         loadCurrentTranscriptionModel()
         refreshAllAvailableModels()
+        updateConfiguredCloudModels()
     }
     
     private func createRecordingsDirectoryIfNeeded() {
@@ -436,6 +438,34 @@ class WhisperState: NSObject, ObservableObject {
     
     private func cleanupAndDismiss() async {
         await dismissMiniRecorder()
+    }
+    
+    func updateConfiguredCloudModels() {
+        let cloudModels = allAvailableModels.compactMap { $0 as? CloudModel }
+        var configuredModels: [CloudModel] = []
+
+        for model in cloudModels {
+            let apiKey: String?
+            switch model.provider {
+            case .groq:
+                apiKey = UserDefaults.standard.string(forKey: "GROQAPIKey")
+            case .elevenLabs:
+                apiKey = UserDefaults.standard.string(forKey: "ElevenLabsAPIKey")
+            case .deepgram:
+                apiKey = UserDefaults.standard.string(forKey: "DeepgramAPIKey")
+            case .mistral:
+                apiKey = UserDefaults.standard.string(forKey: "MistralAPIKey")
+            case .gemini:
+                apiKey = UserDefaults.standard.string(forKey: "GeminiAPIKey")
+            default:
+                apiKey = nil
+            }
+
+            if let key = apiKey, !key.isEmpty {
+                configuredModels.append(model)
+            }
+        }
+        self.configuredCloudModels = configuredModels
     }
 }
 
